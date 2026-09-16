@@ -1,3 +1,4 @@
+import base64
 import json
 
 import gspread
@@ -18,7 +19,11 @@ def _get_worksheet():
     if _worksheet is not None:
         return _worksheet
 
-    if config.GOOGLE_SHEETS_CREDENTIALS_JSON:
+    if config.GOOGLE_SHEETS_CREDENTIALS_JSON_B64:
+        raw = base64.b64decode(config.GOOGLE_SHEETS_CREDENTIALS_JSON_B64)
+        info = json.loads(raw)
+        creds = Credentials.from_service_account_info(info, scopes=_SCOPES)
+    elif config.GOOGLE_SHEETS_CREDENTIALS_JSON:
         info = json.loads(config.GOOGLE_SHEETS_CREDENTIALS_JSON)
         creds = Credentials.from_service_account_info(info, scopes=_SCOPES)
     else:
