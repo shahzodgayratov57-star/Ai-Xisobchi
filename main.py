@@ -273,6 +273,15 @@ async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             os.remove(filepath)
 
 
+async def hourly_health_check(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Soatlik texnik nazorat: faqat serverga log yozadi, guruhga xabar yubormaydi."""
+    try:
+        records = sheets_service.get_all_records()
+        logger.info("Soatlik tekshiruv: bot ishlayapti, jadvalda jami %d ta yozuv.", len(records))
+    except Exception:
+        logger.exception("Soatlik tekshiruvda xatolik")
+
+
 def main() -> None:
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
@@ -287,6 +296,8 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    app.job_queue.run_repeating(hourly_health_check, interval=3600, first=3600)
 
     logger.info("Hisobchi AI ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
