@@ -116,15 +116,21 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
     }
     sheets_service.append_transaction(row)
 
-    emoji = "\U0001F4B5" if data["turi"] == "daromad" else "\U0001F4B8"
-    await update.message.reply_text(
-        f"{emoji} *{row['turi'].capitalize()}* saqlandi!\n"
-        f"Kategoriya: {row['kategoriya']}\n"
-        f"Summa: {row['summa']:,} {row['valyuta']}\n"
-        f"Izoh: {row['izoh']}\n"
-        f"Sana: {row['sana']}",
-        parse_mode="Markdown",
+    is_group = (
+        config.ALLOWED_GROUP_CHAT_ID is not None
+        and update.effective_chat
+        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
     )
+    if not is_group:
+        emoji = "\U0001F4B5" if data["turi"] == "daromad" else "\U0001F4B8"
+        await update.message.reply_text(
+            f"{emoji} *{row['turi'].capitalize()}* saqlandi!\n"
+            f"Kategoriya: {row['kategoriya']}\n"
+            f"Summa: {row['summa']:,} {row['valyuta']}\n"
+            f"Izoh: {row['izoh']}\n"
+            f"Sana: {row['sana']}",
+            parse_mode="Markdown",
+        )
     return True
 
 
@@ -133,9 +139,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = update.message.text
     await update.message.chat.send_action(ChatAction.TYPING)
 
+    is_group = (
+        config.ALLOWED_GROUP_CHAT_ID is not None
+        and update.effective_chat
+        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
+    )
+
     try:
         handled = await _save_and_reply_transaction(update, text)
-        if not handled:
+        if not handled and not is_group:
             await update.message.reply_text(
                 "Bu xabarni moliyaviy operatsiya sifatida aniqlay olmadim. "
                 "Masalan: \"taksiga 25000 so'm sarfladim\" kabi yozib ko'ring, "
