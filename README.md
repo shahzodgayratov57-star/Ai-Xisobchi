@@ -61,6 +61,25 @@ python main.py
 - **`/export`, `/hisobot` yoki `/excel`**: barcha yozuvlarni `.xlsx` fayl
   ko'rinishida yuklab beradi (jami bo'yicha xulosa varag'i bilan).
 
+## 7. Railway'ga deploy qilish
+
+1. [Railway](https://railway.app)da yangi loyiha yarating: **New Project → Deploy from GitHub repo**
+   va shu repo'ni tanlang.
+2. Railway avtomatik ravishda `requirements.txt` va `Procfile` (`worker: python main.py`)ni
+   aniqlab, worker sifatida ishga tushiradi (HTTP port kerak emas).
+3. **Variables** bo'limida quyidagi muhit o'zgaruvchilarini qo'shing:
+   - `TELEGRAM_BOT_TOKEN`
+   - `OPENAI_API_KEY`
+   - `GOOGLE_SHEET_ID`
+   - `GOOGLE_SHEETS_CREDENTIALS_JSON` — `credentials.json` faylining butun mazmunini
+     (bitta qatordagi JSON sifatida) shu yerga joylashtiring. `credentials.json` fayli
+     repo'ga yuklanmagani uchun (`.gitignore`da), bu server tomonda kalitni ta'minlashning
+     eng oson yo'li.
+   - Ixtiyoriy: `ALLOWED_TELEGRAM_USER_ID`, `ALLOWED_GROUP_CHAT_ID`, `GOOGLE_SHEET_WORKSHEET`,
+     `OPENAI_CHAT_MODEL`, `OPENAI_TRANSCRIBE_MODEL`.
+4. Deploy tugagach, loglarda `Hisobchi AI ishga tushdi...` yozuvini ko'rasiz — bot Telegram'da
+   ishlashga tayyor.
+
 ## Loyiha tuzilishi
 
 - `main.py` — Telegram handler'lar va botni ishga tushirish
