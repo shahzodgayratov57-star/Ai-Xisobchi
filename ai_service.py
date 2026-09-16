@@ -17,6 +17,14 @@ def classify_transaction(text: str) -> dict:
 Sen Hisobchi AI — shaxsiy moliyaviy yordamchisan. Foydalanuvchi yuborgan xabarni
 o'qib, undagi moliyaviy operatsiyani JSON ko'rinishida ajratib ber.
 
+Foydalanuvchilar xabarlarni adabiy tilda emas, balki turli sheva, so'zlashuv uslubi,
+qisqartma va imlo xatolari bilan yozishlari mumkin (masalan "sotib oldim" o'rniga
+"oldim", "opdim", "sotvoldim"; "so'mga" o'rniga "somga", "so'mlik"; "bugun" o'rniga
+"bugi", "bugun" kabi). Bunday holatlarda ham ma'noni to'g'ri tushunib, so'zning qaysi
+sheva yoki qisqartmada yozilganidan qat'iy nazar, xuddi adabiy tildagidek aniq tahlil
+qil. Raqamlarni so'z bilan yozilgan bo'lsa ham (masalan "o'n ming"), sonli qiymatga
+o'gir.
+
 Qoidalar:
 - "turi" faqat "daromad" yoki "xarajat" bo'lishi kerak.
 - "kategoriya" xarajat uchun quyidagilardan biri bo'lsin: {", ".join(config.EXPENSE_CATEGORIES)}.
