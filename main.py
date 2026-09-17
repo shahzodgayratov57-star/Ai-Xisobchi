@@ -94,27 +94,38 @@ def _user_label(update: Update) -> str:
 
 
 async def _save_and_reply_transaction(update: Update, text: str) -> bool:
-    """Matnni tahlil qilib, agar moliyaviy operatsiya bo'lsa jadvalga yozadi.
-    Operatsiya sifatida aniqlangan bo'lsa True qaytaradi."""
+    """Matnni tahlil qilib, undagi moliyaviy operatsiya(lar)ni jadvalga yozadi.
+    Bitta xabarda bir nechta operatsiya (masalan turli valyutada) bo'lishi
+    mumkin — har biri alohida qator sifatida saqlanadi. Kamida bitta operatsiya
+    aniqlangan bo'lsa True qaytaradi."""
 
-    data = ai_service.classify_transaction(text)
+    transactions = ai_service.classify_transaction(text)
 
-    if not data.get("turi"):
+    if not transactions:
         return False
 
     now = datetime.now()
-    row = {
-        "sana": data.get("sana") or now.strftime("%Y-%m-%d"),
-        "vaqt": now.strftime("%H:%M:%S"),
-        "foydalanuvchi": _user_label(update),
-        "turi": data["turi"],
-        "kategoriya": data.get("kategoriya") or "Boshqa",
-        "summa": data.get("summa") or 0,
-        "valyuta": data.get("valyuta") or "UZS",
-        "izoh": data.get("izoh") or "",
-        "original_xabar": text,
-    }
-    sheets_service.append_transaction(row)
+    saved_rows = []
+    has_xarajat = False
+    for data in transactions:
+        row = {
+            "sana": data.get("sana") or now.strftime("%Y-%m-%d"),
+            "vaqt": now.strftime("%H:%M:%S"),
+            "foydalanuvchi": _user_label(update),
+            "turi": data["turi"],
+            "kategoriya": data.get("kategoriya") or "Boshqa",
+            "summa": data.get("summa") or 0,
+            "valyuta": data.get("valyuta") or "UZS",
+            "izoh": data.get("izoh") or "",
+            "original_xabar": text,
+        }
+        sheets_service.append_transaction(row)
+        saved_rows.append(row)
+        if row["turi"] == "xarajat":
+            has_xarajat = True
+
+    if has_xarajat:
+        sheets_service.update_expense_chart()
 
     is_group = (
         config.ALLOWED_GROUP_CHAT_ID is not None
@@ -122,34 +133,44 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
         and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
     )
     if not is_group:
-        emoji = "\U0001F4B5" if data["turi"] == "daromad" else "\U0001F4B8"
-        await update.message.reply_text(
-            f"{emoji} *{row['turi'].capitalize()}* saqlandi!\n"
-            f"Kategoriya: {row['kategoriya']}\n"
-            f"Summa: {row['summa']:,} {row['valyuta']}\n"
-            f"Izoh: {row['izoh']}\n"
-            f"Sana: {row['sana']}",
-            parse_mode="Markdown",
-        )
-        if row["turi"] == "xarajat":
+        for row in saved_rows:
+            emoji = "\U0001F4B5" if row["turi"] == "daromad" else "\U0001F4B8"
+            await update.message.reply_text(
+                f"{emoji} *{row['turi'].capitalize()}* saqlandi!\n"
+                f"Kategoriya: {row['kategoriya']}\n"
+                f"Summa: {row['summa']:,} {row['valyuta']}\n"
+                f"Izoh: {row['izoh']}\n"
+                f"Sana: {row['sana']}",
+                parse_mode="Markdown",
+            )
+        if has_xarajat:
             await _send_expense_chart(update)
     return True
 
 
 async def _send_expense_chart(update: Update) -> None:
-    """Xarajatlar taqsimotini doiraviy diagramma (rasm) sifatida chatga yuboradi."""
-    chart_path = None
+    """Xarajatlar taqsimotini har bir valyuta uchun alohida doiraviy diagramma
+    (rasm) sifatida chatga yuboradi (so'm va dollar aralashtirilmaydi)."""
     try:
-        totals = sheets_service.expense_totals_by_category()
-        chart_path = excel_service.generate_expense_chart_image(totals)
-        if chart_path:
-            with open(chart_path, "rb") as f:
-                await update.message.reply_photo(photo=f, caption="\U0001F4CA Xarajatlar taqsimoti")
+        totals_by_currency = sheets_service.expense_totals_by_category()
     except Exception:
-        logger.exception("Xarajatlar grafigini yuborishda xatolik")
-    finally:
-        if chart_path and os.path.exists(chart_path):
-            os.remove(chart_path)
+        logger.exception("Xarajatlar jamlanmasini olishda xatolik")
+        return
+
+    for valyuta, totals in totals_by_currency.items():
+        chart_path = None
+        try:
+            chart_path = excel_service.generate_expense_chart_image(totals, valyuta)
+            if chart_path:
+                with open(chart_path, "rb") as f:
+                    await update.message.reply_photo(
+                        photo=f, caption=f"\U0001F4CA Xarajatlar taqsimoti ({valyuta})"
+                    )
+        except Exception:
+            logger.exception("Xarajatlar grafigini yuborishda xatolik (%s)", valyuta)
+        finally:
+            if chart_path and os.path.exists(chart_path):
+                os.remove(chart_path)
 
 
 @restricted

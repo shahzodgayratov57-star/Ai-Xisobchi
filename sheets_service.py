@@ -3,6 +3,7 @@ import json
 
 import gspread
 from google.oauth2.service_account import Credentials
+from gspread.utils import rowcol_to_a1
 
 import config
 
@@ -75,11 +76,18 @@ def _get_chart_worksheet():
     try:
         worksheet = spreadsheet.worksheet(CHART_WORKSHEET_TITLE)
     except gspread.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=CHART_WORKSHEET_TITLE, rows=1000, cols=12)
+        worksheet = spreadsheet.add_worksheet(title=CHART_WORKSHEET_TITLE, rows=1000, cols=100)
 
-    # B ustuni - jami summalar, A30 dan pastda esa har bir kategoriya o'z
-    # ustunida (A-L) alohida xarajatlar bilan - hammasi son formatida.
-    worksheet.format("B2:L1000", SUMMA_NUMBER_FORMAT)
+    # Eski (avvalroq kichikroq o'lchamda yaratilgan) varaq bo'lsa, bir nechta
+    # valyuta blokini sig'dirish uchun kattalashtiramiz.
+    if worksheet.row_count < 1000 or worksheet.col_count < 100:
+        worksheet.resize(rows=max(worksheet.row_count, 1000), cols=max(worksheet.col_count, 100))
+
+    # Har bir valyuta o'z ustun blokida (jami summalar va kategoriya bo'yicha
+    # batafsil jadval) - hammasi son formatida ko'rinishi uchun keng maydonni
+    # oldindan formatlab qo'yamiz.
+    end_col_letters = "".join(ch for ch in rowcol_to_a1(1, 100) if ch.isalpha())
+    worksheet.format(f"A2:{end_col_letters}1000", SUMMA_NUMBER_FORMAT)
 
     _chart_worksheet = worksheet
     return _chart_worksheet
@@ -110,73 +118,102 @@ def get_all_records() -> list[dict]:
     return worksheet.get_all_records()
 
 
-def expense_totals_by_category() -> list[tuple[str, float]]:
-    """Barcha xarajatlarni kategoriya bo'yicha jamlab, kamayish tartibida qaytaradi."""
-    totals: dict[str, float] = {}
+def _sorted_currencies(currencies) -> list[str]:
+    """UZS har doim birinchi, qolganlari alifbo tartibida."""
+    ordered = sorted(currencies)
+    if "UZS" in ordered:
+        ordered.remove("UZS")
+        ordered.insert(0, "UZS")
+    return ordered
+
+
+def expense_totals_by_category() -> dict[str, list[tuple[str, float]]]:
+    """Barcha xarajatlarni valyuta, so'ng kategoriya bo'yicha jamlab qaytaradi
+    (har bir valyuta alohida hisoblanadi — so'm va dollar qo'shib yuborilmaydi)."""
+    totals: dict[str, dict[str, float]] = {}
     for record in get_all_records():
         if str(record.get("Turi", "")).strip().lower() != "xarajat":
             continue
+        valyuta = str(record.get("Valyuta") or "UZS").strip().upper()
         kategoriya = record.get("Kategoriya") or "Boshqa"
         try:
             summa = float(record.get("Summa") or 0)
         except (TypeError, ValueError):
             summa = 0
-        totals[kategoriya] = totals.get(kategoriya, 0) + summa
+        totals.setdefault(valyuta, {})
+        totals[valyuta][kategoriya] = totals[valyuta].get(kategoriya, 0) + summa
 
-    return sorted(totals.items(), key=lambda item: item[1], reverse=True)
+    return {
+        valyuta: sorted(kategoriya_totals.items(), key=lambda item: item[1], reverse=True)
+        for valyuta, kategoriya_totals in totals.items()
+    }
 
 
 BREAKDOWN_START_ROW = 30
+CURRENCY_BLOCK_WIDTH = 14
 
 
-def expense_breakdown_by_category() -> dict[str, list[float]]:
-    """Xarajatlarni kategoriya bo'yicha, yozilgan tartibida ro'yxatlarga ajratadi.
-    Mavjud kategoriya uchun summa o'sha kategoriya ustuniga pastdan qo'shiladi,
-    yangi kategoriya esa o'zining alohida ustunini oladi (birinchi uchragan
-    tartibda)."""
-    per_category: dict[str, list[float]] = {}
+def expense_breakdown_by_category() -> dict[str, dict[str, list[float]]]:
+    """Xarajatlarni valyuta, so'ng kategoriya bo'yicha, yozilgan tartibida
+    ro'yxatlarga ajratadi. Mavjud kategoriya uchun summa o'sha kategoriya
+    ustuniga pastdan qo'shiladi, yangi kategoriya esa o'zining alohida
+    ustunini oladi (birinchi uchragan tartibda)."""
+    per_currency: dict[str, dict[str, list[float]]] = {}
     for record in get_all_records():
         if str(record.get("Turi", "")).strip().lower() != "xarajat":
             continue
+        valyuta = str(record.get("Valyuta") or "UZS").strip().upper()
         kategoriya = record.get("Kategoriya") or "Boshqa"
         try:
             summa = float(record.get("Summa") or 0)
         except (TypeError, ValueError):
             summa = 0
-        per_category.setdefault(kategoriya, []).append(summa)
+        per_currency.setdefault(valyuta, {}).setdefault(kategoriya, []).append(summa)
 
-    return per_category
+    return per_currency
 
 
 def update_expense_chart() -> None:
-    """'List 2' varag'iga xarajatlar jadvalini yozib, uni doiraviy diagramma
-    (pie chart) sifatida ham chizadi, shunda Google Sheetsda grafik ko'rinishida
-    ko'rinadi. Shu bilan birga, har bir kategoriya o'z ustuniga ega bo'lgan
-    batafsil jadval (har bir xarajat alohida qatorda) ham yoziladi."""
+    """'List 2' varag'iga xarajatlar jadvalini yozadi. Har bir valyuta (so'm,
+    dollar va h.k.) o'zining alohida ustun blokida, o'z jami/kategoriya
+    jadvali va o'z doiraviy diagrammasi bilan ko'rsatiladi — valyutalar
+    hech qachon bir-biriga qo'shib hisoblanmaydi."""
 
-    totals = expense_totals_by_category()
+    totals_by_currency = expense_totals_by_category()
+    breakdown_by_currency = expense_breakdown_by_category()
+    currencies = _sorted_currencies(set(totals_by_currency) | set(breakdown_by_currency))
 
     worksheet = _get_chart_worksheet()
     worksheet.clear()
 
-    rows = [["Kategoriya", "Summa"]] + [[kategoriya, summa] for kategoriya, summa in totals]
-    worksheet.update("A1", rows)
+    chart_blocks = []
+    for i, valyuta in enumerate(currencies):
+        col_offset = i * CURRENCY_BLOCK_WIDTH
 
-    per_category = expense_breakdown_by_category()
-    if per_category:
-        categories = list(per_category.keys())
-        max_len = max(len(values) for values in per_category.values())
-        breakdown_rows = [categories]
-        for i in range(max_len):
-            breakdown_rows.append(
-                [per_category[kategoriya][i] if i < len(per_category[kategoriya]) else "" for kategoriya in categories]
-            )
-        worksheet.update(f"A{BREAKDOWN_START_ROW}", breakdown_rows)
+        totals = totals_by_currency.get(valyuta, [])
+        rows = [[f"Kategoriya ({valyuta})", "Summa"]] + [[kategoriya, summa] for kategoriya, summa in totals]
+        worksheet.update(rowcol_to_a1(1, col_offset + 1), rows)
 
-    _upsert_expense_pie_chart(worksheet, data_row_count=len(rows))
+        per_category = breakdown_by_currency.get(valyuta, {})
+        if per_category:
+            categories = list(per_category.keys())
+            max_len = max(len(values) for values in per_category.values())
+            breakdown_rows = [categories]
+            for row_i in range(max_len):
+                breakdown_rows.append(
+                    [
+                        per_category[kategoriya][row_i] if row_i < len(per_category[kategoriya]) else ""
+                        for kategoriya in categories
+                    ]
+                )
+            worksheet.update(rowcol_to_a1(BREAKDOWN_START_ROW, col_offset + 1), breakdown_rows)
+
+        chart_blocks.append((valyuta, col_offset, len(rows)))
+
+    _upsert_expense_pie_charts(worksheet, chart_blocks)
 
 
-def _upsert_expense_pie_chart(worksheet, data_row_count: int) -> None:
+def _upsert_expense_pie_charts(worksheet, blocks: list[tuple[str, int, int]]) -> None:
     spreadsheet = worksheet.spreadsheet
     sheet_id = worksheet.id
 
@@ -190,13 +227,15 @@ def _upsert_expense_pie_chart(worksheet, data_row_count: int) -> None:
         for chart in sheet.get("charts", []):
             requests.append({"deleteEmbeddedObject": {"objectId": chart["chartId"]}})
 
-    if data_row_count > 1:
+    for valyuta, col_offset, data_row_count in blocks:
+        if data_row_count <= 1:
+            continue
         requests.append(
             {
                 "addChart": {
                     "chart": {
                         "spec": {
-                            "title": "Xarajatlar (kategoriya bo'yicha)",
+                            "title": f"Xarajatlar ({valyuta})",
                             "pieChart": {
                                 "legendPosition": "RIGHT_LEGEND",
                                 "domain": {
@@ -206,8 +245,8 @@ def _upsert_expense_pie_chart(worksheet, data_row_count: int) -> None:
                                                 "sheetId": sheet_id,
                                                 "startRowIndex": 1,
                                                 "endRowIndex": data_row_count,
-                                                "startColumnIndex": 0,
-                                                "endColumnIndex": 1,
+                                                "startColumnIndex": col_offset,
+                                                "endColumnIndex": col_offset + 1,
                                             }
                                         ]
                                     }
@@ -219,8 +258,8 @@ def _upsert_expense_pie_chart(worksheet, data_row_count: int) -> None:
                                                 "sheetId": sheet_id,
                                                 "startRowIndex": 1,
                                                 "endRowIndex": data_row_count,
-                                                "startColumnIndex": 1,
-                                                "endColumnIndex": 2,
+                                                "startColumnIndex": col_offset + 1,
+                                                "endColumnIndex": col_offset + 2,
                                             }
                                         ]
                                     }
@@ -232,10 +271,10 @@ def _upsert_expense_pie_chart(worksheet, data_row_count: int) -> None:
                                 "anchorCell": {
                                     "sheetId": sheet_id,
                                     "rowIndex": 0,
-                                    "columnIndex": 3,
+                                    "columnIndex": col_offset + 3,
                                 },
-                                "widthPixels": 600,
-                                "heightPixels": 400,
+                                "widthPixels": 500,
+                                "heightPixels": 350,
                             }
                         },
                     }
