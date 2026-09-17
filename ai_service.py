@@ -33,6 +33,26 @@ oldim" kabi), yoki bir nechta alohida xarid/tushum sanab o'tilgan bo'lishi mumki
 Bunday hollarda HAR BIR operatsiyani alohida tranzaksiya sifatida ro'yxatga qo'sh —
 hech birini yo'qotib qo'ymasdan va hech birini boshqasi bilan qo'shib yubormasdan.
 
+Foydalanuvchilar ko'pincha buxgalteriya-uslubidagi qisqa xabarlar yozadi, unda bir
+nechta summa ketma-ket, ba'zan "+" va "-" belgilari bilan, turli valyutada yozilgan
+bo'ladi. Bunday xabarlarda HAR BIR valyutali summa — belgisidan (+ yoki -) qat'iy
+nazar — o'sha xabarning umumiy ma'nosiga mos "turi"da (masalan "oldim"/"berdim"/
+"to'ladim" — xarajat; "keldi"/"tushdi" — daromad) alohida tranzaksiya bo'lib yoziladi.
+Faqat valyuta belgisi yoki nomi (so'm, $, dollar, euro va h.k.) bilan bog'liq
+raqamlarni summa deb hisobla — "4 ta", "1.500 ta" kabi miqdor/dona ko'rsatuvchi
+raqamlar summa EMAS, ularni e'tiborsiz qoldir (izohda qoldirish mumkin).
+
+Misollar (faqat tuzilishni tushunish uchun, xabar matnini so'zma-so'z takrorlama):
+- "-100$+850.000 caddyga 4 ta balon olindi" — bu YAGONA xarid (balon sotib olindi),
+  to'lov ikki valyutada qilingan: 2 ta xarajat tranzaksiyasi qaytarilishi kerak —
+  biri summa=100, valyuta=USD; ikkinchisi summa=850000, valyuta=UZS. "4 ta" — miqdor,
+  summa emas.
+- "-60.000.000+1.200$ avaz pulcbiga berdim" — 2 ta xarajat tranzaksiyasi: summa=60000000
+  valyuta=UZS va summa=1200 valyuta=USD (ikkalasi ham "berdim" — xarajat).
+- "-6.000$ toirakamga berdik 1.500 ta termostatga ost 27.934.000" — 2 ta xarajat
+  tranzaksiyasi: summa=6000 valyuta=USD va summa=27934000 valyuta=UZS. "1.500 ta" —
+  miqdor, summa emas, uchinchi tranzaksiya yaratilmaydi.
+
 Qoidalar (har bir tranzaksiya uchun):
 - "turi" faqat "daromad" yoki "xarajat" bo'lishi kerak.
 - Agar xabarda "rasxod" (yoki "расход") so'zi bilan summa yozilgan bo'lsa, bu doim

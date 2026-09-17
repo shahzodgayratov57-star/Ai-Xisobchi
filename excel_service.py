@@ -32,6 +32,9 @@ def generate_expense_chart_image(totals: list[tuple[str, float]], valyuta: str =
     (PNG rasm) sifatida chizib, chatda yuborish uchun fayl yo'lini qaytaradi.
     Xarajat bo'lmasa None."""
 
+    # 0 yoki manfiy summali kategoriyalar pie chartni buzadi (bo'sh sektor),
+    # shuning uchun faqat musbat summalarni chizamiz.
+    totals = [(kategoriya, summa) for kategoriya, summa in totals if summa > 0]
     if not totals:
         return None
 
