@@ -111,7 +111,7 @@ async def _save_transactions(
     if not transactions:
         return False
 
-    now = datetime.now()
+    now = datetime.now(config.TASHKENT_TZ)
     saved_rows = []
     has_xarajat = False
     # Bitta xabarda bir nechta tranzaksiya bo'lsa (masalan 2 xil valyutada),
@@ -119,6 +119,7 @@ async def _save_transactions(
     # "original xabar"dagi bilan bir xil matn yoziladi. Rasmdan chiqarilgan
     # ro'yxatda esa har bir qatorning o'z izohi saqlanadi (share_izoh=False).
     shared_izoh = source_text if (share_izoh and len(transactions) > 1) else None
+    manba = "Guruh" if _is_group_chat(update) else "Shaxsiy"
     for data in transactions:
         row = {
             "sana": data.get("sana") or now.strftime("%Y-%m-%d"),
@@ -130,6 +131,7 @@ async def _save_transactions(
             "valyuta": data.get("valyuta") or "UZS",
             "izoh": shared_izoh if shared_izoh is not None else (data.get("izoh") or ""),
             "original_xabar": source_text,
+            "manba": manba,
         }
         sheets_service.append_transaction(row)
         saved_rows.append(row)
@@ -296,7 +298,10 @@ async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     filepath = None
     try:
-        records = sheets_service.get_all_records()
+        # Guruhda yozilgan xarajat/daromadlar faqat guruhda, shaxsiy chatdagilar
+        # esa faqat shaxsiy chatda ko'rinadi - ikkalasi bir-biriga aralashmaydi.
+        manba = "Guruh" if _is_group_chat(update) else "Shaxsiy"
+        records = sheets_service.get_all_records(manba=manba)
         if not records:
             await update.message.reply_text("Hozircha hech qanday yozuv mavjud emas.")
             return

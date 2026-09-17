@@ -9,7 +9,7 @@ import config
 def export_to_excel(records: list[dict]) -> str:
     df = pd.DataFrame(records)
 
-    filename = f"hisobchi_ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"hisobchi_ai_{datetime.now(config.TASHKENT_TZ).strftime('%Y%m%d_%H%M%S')}.xlsx"
     filepath = os.path.join(config.TEMP_DIR, filename)
 
     with pd.ExcelWriter(filepath, engine="openpyxl") as writer:

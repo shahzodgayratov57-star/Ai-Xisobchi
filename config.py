@@ -1,8 +1,13 @@
 import os
+from datetime import timedelta, timezone
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Toshkent vaqti doim UTC+5 (yozgi vaqtga o'tish yo'q), shuning uchun tizim
+# tzdata'siga bog'liq bo'lmaslik uchun aniq offset ishlatiladi.
+TASHKENT_TZ = timezone(timedelta(hours=5))
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
@@ -32,6 +37,7 @@ SHEET_HEADERS = [
     "Valyuta",
     "Izoh",
     "Original xabar",
+    "Manba",
 ]
 
 EXPENSE_CATEGORIES = [

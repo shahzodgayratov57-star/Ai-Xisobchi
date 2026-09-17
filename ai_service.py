@@ -24,7 +24,7 @@ def classify_transaction(text: str) -> list[dict]:
     Bitta xabarda bir nechta operatsiya (masalan turli valyutada: ham so'm,
     ham dollar) bo'lishi mumkin, shuning uchun har doim ro'yxat qaytariladi."""
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(config.TASHKENT_TZ).strftime("%Y-%m-%d")
     system_prompt = f"""
 Sen Hisobchi AI — shaxsiy moliyaviy yordamchisan. Foydalanuvchi yuborgan xabarni
 o'qib, undagi moliyaviy operatsiya(lar)ni JSON ko'rinishida ajratib ber.
@@ -158,7 +158,7 @@ def classify_transactions_from_image(image_base64: str, filename: str = "") -> l
     """Rasmdagi (masalan qo'lda yozilgan kunlik hisob-kitob varag'i) prixod/rasxod
     yozuvlarini o'qib, tranzaksiyalar ro'yxatiga aylantiradi."""
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(config.TASHKENT_TZ).strftime("%Y-%m-%d")
     system_prompt = IMAGE_TRANSACTION_SYSTEM_PROMPT_TEMPLATE.format(
         expense_categories=", ".join(config.EXPENSE_CATEGORIES),
         income_categories=", ".join(config.INCOME_CATEGORIES),

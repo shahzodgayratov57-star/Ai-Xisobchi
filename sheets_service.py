@@ -56,8 +56,13 @@ def _get_worksheet():
             title=config.GOOGLE_SHEET_WORKSHEET, rows=1000, cols=len(config.SHEET_HEADERS)
         )
 
-    if worksheet.row_count == 0 or not worksheet.row_values(1):
+    header_row = worksheet.row_values(1)
+    if not header_row:
         worksheet.append_row(config.SHEET_HEADERS)
+    elif len(header_row) < len(config.SHEET_HEADERS):
+        # Eski jadvalga keyinroq qo'shilgan ustunlar (masalan "Manba") uchun
+        # sarlavha qatorini to'ldirib qo'yamiz, mavjud ma'lumotlarga tegmasdan.
+        worksheet.update("A1", [config.SHEET_HEADERS])
 
     # "Summa" ustuni (F) minglik ajratgich bilan o'qilishi oson bo'lsin (masalan 1,000,000).
     worksheet.format("F2:F10000", SUMMA_NUMBER_FORMAT)
@@ -106,6 +111,7 @@ def append_transaction(row: dict) -> None:
             row.get("valyuta", ""),
             row.get("izoh", ""),
             row.get("original_xabar", ""),
+            row.get("manba", ""),
         ]
     )
 
@@ -113,9 +119,16 @@ def append_transaction(row: dict) -> None:
         update_expense_chart()
 
 
-def get_all_records() -> list[dict]:
+def get_all_records(manba: str | None = None) -> list[dict]:
+    """Barcha yozuvlarni qaytaradi. `manba` berilsa ("Guruh" yoki "Shaxsiy"),
+    faqat o'sha manbadan kelgan qatorlar qaytariladi — guruhda yozilgan
+    xarajat/daromadlar shaxsiy chatda (va aksincha) ko'rsatilmasligi uchun.
+    Eski (Manba ustuni bo'lmagan) yozuvlar "Shaxsiy" deb hisoblanadi."""
     worksheet = _get_worksheet()
-    return worksheet.get_all_records()
+    records = worksheet.get_all_records()
+    if manba is None:
+        return records
+    return [r for r in records if (r.get("Manba") or "Shaxsiy") == manba]
 
 
 def _sorted_currencies(currencies) -> list[str]:
