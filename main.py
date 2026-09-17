@@ -131,7 +131,25 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
             f"Sana: {row['sana']}",
             parse_mode="Markdown",
         )
+        if row["turi"] == "xarajat":
+            await _send_expense_chart(update)
     return True
+
+
+async def _send_expense_chart(update: Update) -> None:
+    """Xarajatlar taqsimotini doiraviy diagramma (rasm) sifatida chatga yuboradi."""
+    chart_path = None
+    try:
+        totals = sheets_service.expense_totals_by_category()
+        chart_path = excel_service.generate_expense_chart_image(totals)
+        if chart_path:
+            with open(chart_path, "rb") as f:
+                await update.message.reply_photo(photo=f, caption="\U0001F4CA Xarajatlar taqsimoti")
+    except Exception:
+        logger.exception("Xarajatlar grafigini yuborishda xatolik")
+    finally:
+        if chart_path and os.path.exists(chart_path):
+            os.remove(chart_path)
 
 
 @restricted
@@ -220,6 +238,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 @restricted
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = (
+        config.ALLOWED_GROUP_CHAT_ID is not None
+        and update.effective_chat
+        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
+    )
+    if is_group:
+        # Guruhda har kuni yuboriladigan kunlik hisobot rasmlariga izoh yozilmaydi.
+        return
+
     await update.message.chat.send_action(ChatAction.TYPING)
     photo = update.message.photo[-1]
     tg_file = await context.bot.get_file(photo.file_id)
@@ -265,6 +292,7 @@ async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 filename=os.path.basename(filepath),
                 caption=f"✅ Jami {len(records)} ta yozuv eksport qilindi.",
             )
+        await _send_expense_chart(update)
     except Exception:
         logger.exception("Excel eksport qilishda xatolik")
         await update.message.reply_text("Kechirasiz, ma'lumotlarni eksport qilishda xatolik yuz berdi.")

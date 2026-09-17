@@ -27,6 +27,10 @@ o'gir.
 
 Qoidalar:
 - "turi" faqat "daromad" yoki "xarajat" bo'lishi kerak.
+- Agar xabarda "rasxod" (yoki "расход") so'zi bilan summa yozilgan bo'lsa, bu doim
+  "xarajat" (pul chiqimi) hisoblanadi. Agar "prixod" (yoki "приход") so'zi bilan summa
+  yozilgan bo'lsa, bu doim "daromad" (pul kirimi) hisoblanadi — bu so'zlar shevada/
+  so'zlashuvda tez-tez ishlatiladi va ustuvor qoida hisoblanadi.
 - "kategoriya" xarajat uchun quyidagilardan biri bo'lsin: {", ".join(config.EXPENSE_CATEGORIES)}.
 - daromad uchun quyidagilardan biri bo'lsin: {", ".join(config.INCOME_CATEGORIES)}.
   Agar mos kategoriya topilmasa, eng yaqinini yoki "Boshqa xarajat"/"Boshqa daromad" ni tanla.
