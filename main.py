@@ -107,6 +107,10 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
     now = datetime.now()
     saved_rows = []
     has_xarajat = False
+    # Bitta xabarda bir nechta tranzaksiya bo'lsa (masalan 2 xil valyutada),
+    # ularning hammasi bir manbadan kelganini bilish uchun "izoh" ustuniga ham
+    # "original xabar"dagi bilan bir xil matn yoziladi.
+    shared_izoh = text if len(transactions) > 1 else None
     for data in transactions:
         row = {
             "sana": data.get("sana") or now.strftime("%Y-%m-%d"),
@@ -116,7 +120,7 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
             "kategoriya": data.get("kategoriya") or "Boshqa",
             "summa": data.get("summa") or 0,
             "valyuta": data.get("valyuta") or "UZS",
-            "izoh": data.get("izoh") or "",
+            "izoh": shared_izoh if shared_izoh is not None else (data.get("izoh") or ""),
             "original_xabar": text,
         }
         sheets_service.append_transaction(row)
