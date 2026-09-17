@@ -147,34 +147,7 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
                 f"Sana: {row['sana']}",
                 parse_mode="Markdown",
             )
-        if has_xarajat:
-            await _send_expense_chart(update)
     return True
-
-
-async def _send_expense_chart(update: Update) -> None:
-    """Xarajatlar taqsimotini har bir valyuta uchun alohida doiraviy diagramma
-    (rasm) sifatida chatga yuboradi (so'm va dollar aralashtirilmaydi)."""
-    try:
-        totals_by_currency = sheets_service.expense_totals_by_category()
-    except Exception:
-        logger.exception("Xarajatlar jamlanmasini olishda xatolik")
-        return
-
-    for valyuta, totals in totals_by_currency.items():
-        chart_path = None
-        try:
-            chart_path = excel_service.generate_expense_chart_image(totals, valyuta)
-            if chart_path:
-                with open(chart_path, "rb") as f:
-                    await update.message.reply_photo(
-                        photo=f, caption=f"\U0001F4CA Xarajatlar taqsimoti ({valyuta})"
-                    )
-        except Exception:
-            logger.exception("Xarajatlar grafigini yuborishda xatolik (%s)", valyuta)
-        finally:
-            if chart_path and os.path.exists(chart_path):
-                os.remove(chart_path)
 
 
 @restricted
@@ -317,7 +290,6 @@ async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 filename=os.path.basename(filepath),
                 caption=f"✅ Jami {len(records)} ta yozuv eksport qilindi.",
             )
-        await _send_expense_chart(update)
     except Exception:
         logger.exception("Excel eksport qilishda xatolik")
         await update.message.reply_text("Kechirasiz, ma'lumotlarni eksport qilishda xatolik yuz berdi.")
