@@ -17,6 +17,8 @@ _chart_worksheet = None
 
 CHART_WORKSHEET_TITLE = "List 2"
 
+SUMMA_NUMBER_FORMAT = {"numberFormat": {"type": "NUMBER", "pattern": "#,##0"}}
+
 
 def _get_spreadsheet():
     global _spreadsheet
@@ -56,6 +58,9 @@ def _get_worksheet():
     if worksheet.row_count == 0 or not worksheet.row_values(1):
         worksheet.append_row(config.SHEET_HEADERS)
 
+    # "Summa" ustuni (F) minglik ajratgich bilan o'qilishi oson bo'lsin (masalan 1,000,000).
+    worksheet.format("F2:F10000", SUMMA_NUMBER_FORMAT)
+
     _worksheet = worksheet
     return _worksheet
 
@@ -71,6 +76,8 @@ def _get_chart_worksheet():
         worksheet = spreadsheet.worksheet(CHART_WORKSHEET_TITLE)
     except gspread.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=CHART_WORKSHEET_TITLE, rows=200, cols=10)
+
+    worksheet.format("B2:B200", SUMMA_NUMBER_FORMAT)
 
     _chart_worksheet = worksheet
     return _chart_worksheet
