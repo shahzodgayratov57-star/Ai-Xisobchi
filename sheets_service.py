@@ -75,9 +75,11 @@ def _get_chart_worksheet():
     try:
         worksheet = spreadsheet.worksheet(CHART_WORKSHEET_TITLE)
     except gspread.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=CHART_WORKSHEET_TITLE, rows=200, cols=10)
+        worksheet = spreadsheet.add_worksheet(title=CHART_WORKSHEET_TITLE, rows=1000, cols=12)
 
-    worksheet.format("B2:B200", SUMMA_NUMBER_FORMAT)
+    # B ustuni - jami summalar, A30 dan pastda esa har bir kategoriya o'z
+    # ustunida (A-L) alohida xarajatlar bilan - hammasi son formatida.
+    worksheet.format("B2:L1000", SUMMA_NUMBER_FORMAT)
 
     _chart_worksheet = worksheet
     return _chart_worksheet
@@ -124,10 +126,33 @@ def expense_totals_by_category() -> list[tuple[str, float]]:
     return sorted(totals.items(), key=lambda item: item[1], reverse=True)
 
 
+BREAKDOWN_START_ROW = 30
+
+
+def expense_breakdown_by_category() -> dict[str, list[float]]:
+    """Xarajatlarni kategoriya bo'yicha, yozilgan tartibida ro'yxatlarga ajratadi.
+    Mavjud kategoriya uchun summa o'sha kategoriya ustuniga pastdan qo'shiladi,
+    yangi kategoriya esa o'zining alohida ustunini oladi (birinchi uchragan
+    tartibda)."""
+    per_category: dict[str, list[float]] = {}
+    for record in get_all_records():
+        if str(record.get("Turi", "")).strip().lower() != "xarajat":
+            continue
+        kategoriya = record.get("Kategoriya") or "Boshqa"
+        try:
+            summa = float(record.get("Summa") or 0)
+        except (TypeError, ValueError):
+            summa = 0
+        per_category.setdefault(kategoriya, []).append(summa)
+
+    return per_category
+
+
 def update_expense_chart() -> None:
     """'List 2' varag'iga xarajatlar jadvalini yozib, uni doiraviy diagramma
     (pie chart) sifatida ham chizadi, shunda Google Sheetsda grafik ko'rinishida
-    ko'rinadi."""
+    ko'rinadi. Shu bilan birga, har bir kategoriya o'z ustuniga ega bo'lgan
+    batafsil jadval (har bir xarajat alohida qatorda) ham yoziladi."""
 
     totals = expense_totals_by_category()
 
@@ -136,6 +161,17 @@ def update_expense_chart() -> None:
 
     rows = [["Kategoriya", "Summa"]] + [[kategoriya, summa] for kategoriya, summa in totals]
     worksheet.update("A1", rows)
+
+    per_category = expense_breakdown_by_category()
+    if per_category:
+        categories = list(per_category.keys())
+        max_len = max(len(values) for values in per_category.values())
+        breakdown_rows = [categories]
+        for i in range(max_len):
+            breakdown_rows.append(
+                [per_category[kategoriya][i] if i < len(per_category[kategoriya]) else "" for kategoriya in categories]
+            )
+        worksheet.update(f"A{BREAKDOWN_START_ROW}", breakdown_rows)
 
     _upsert_expense_pie_chart(worksheet, data_row_count=len(rows))
 
