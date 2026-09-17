@@ -8,6 +8,16 @@ import config
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 
+def _normalize_transactions(tranzaksiyalar: list[dict], today: str) -> list[dict]:
+    for item in tranzaksiyalar:
+        if not item.get("sana"):
+            item["sana"] = today
+        if not item.get("valyuta"):
+            item["valyuta"] = "UZS"
+        item["valyuta"] = str(item["valyuta"]).strip().upper()
+    return tranzaksiyalar
+
+
 def classify_transaction(text: str) -> list[dict]:
     """Foydalanuvchi matnini (yoki ovozdan yozilgan matnni) tahlil qilib,
     daromad/xarajat sifatida tuzilgan tranzaksiyalar ro'yxatiga aylantiradi.
@@ -98,14 +108,89 @@ Faqat quyidagi JSON formatda javob qaytar, boshqa hech narsa yozma:
     data = json.loads(response.choices[0].message.content)
     tranzaksiyalar = data.get("tranzaksiyalar") or []
 
-    for item in tranzaksiyalar:
-        if not item.get("sana"):
-            item["sana"] = today
-        if not item.get("valyuta"):
-            item["valyuta"] = "UZS"
-        item["valyuta"] = str(item["valyuta"]).strip().upper()
+    return _normalize_transactions(tranzaksiyalar, today)
 
-    return tranzaksiyalar
+
+IMAGE_TRANSACTION_SYSTEM_PROMPT_TEMPLATE = """
+Sen Hisobchi AI — moliyaviy yordamchisan. Senga yuborilgan RASMni diqqat bilan
+o'qib chiq — bu qo'lda yozilgan hisob-kitob varag'i, buxgalteriya jadvali yoki
+shunga o'xshash yozuv bo'lishi mumkin, unda summalar "prixod"/"приход" (kirim)
+va "rasxod"/"расход" (chiqim) deb ikki toifaga ajratilgan bo'ladi.
+
+Rasmda "prixod"/"приход" (yoki "kirim", "tushum") deb belgilangan har bir summa —
+"daromad" turidagi alohida tranzaksiya. "rasxod"/"расход" (yoki "chiqim") deb
+belgilangan har bir summa — "xarajat" turidagi alohida tranzaksiya. Rasmdagi
+HAR BIR aniq summani shu tarzda alohida tranzaksiya sifatida ro'yxatga qo'sh.
+Agar biror summaning turi (prixod yoki rasxod ekanligi) rasmdan aniq bo'lmasa,
+uni ro'yxatga QO'SHMA — noaniq summani hech qachon taxmin qilib yozma.
+
+Qoidalar (har bir tranzaksiya uchun):
+- "turi" faqat "daromad" yoki "xarajat" bo'lishi kerak.
+- "kategoriya" xarajat uchun quyidagilardan biri bo'lsin: {expense_categories}.
+- daromad uchun quyidagilardan biri bo'lsin: {income_categories}.
+  Agar mos kategoriya topilmasa yoki rasmda ko'rsatilmagan bo'lsa, "Boshqa xarajat"/
+  "Boshqa daromad" ni tanla.
+- "summa" faqat son (float), valyuta belgilarisiz.
+- "valyuta" ISO kodda: "UZS", "USD", "EUR" va h.k. Agar aniq bo'lmasa "UZS" deb qo'y.
+- "sana" YYYY-MM-DD formatida. Agar rasmda sana ko'rsatilmagan bo'lsa, bugungi sana: {today}.
+- "izoh" - rasmdagi shu yozuvning qisqa mazmuni (masalan qatorda yozilgan izoh matni).
+
+Agar rasmda umuman moliyaviy yozuv (prixod/rasxod summasi) bo'lmasa, "tranzaksiyalar"
+ni bo'sh ro'yxat ([]) qilib qo'y.
+
+Faqat quyidagi JSON formatda javob qaytar, boshqa hech narsa yozma:
+{{
+  "tranzaksiyalar": [
+    {{
+      "turi": "daromad" | "xarajat",
+      "kategoriya": string,
+      "summa": number,
+      "valyuta": string,
+      "sana": string | null,
+      "izoh": string | null
+    }}
+  ]
+}}
+"""
+
+
+def classify_transactions_from_image(image_base64: str, filename: str = "") -> list[dict]:
+    """Rasmdagi (masalan qo'lda yozilgan kunlik hisob-kitob varag'i) prixod/rasxod
+    yozuvlarini o'qib, tranzaksiyalar ro'yxatiga aylantiradi."""
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    system_prompt = IMAGE_TRANSACTION_SYSTEM_PROMPT_TEMPLATE.format(
+        expense_categories=", ".join(config.EXPENSE_CATEGORIES),
+        income_categories=", ".join(config.INCOME_CATEGORIES),
+        today=today,
+    )
+
+    response = client.chat.completions.create(
+        model=config.OPENAI_CHAT_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Fayl nomi: {filename}. Ushbu rasmdagi prixod/rasxod yozuvlarini ajratib ber.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                    },
+                ],
+            },
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+
+    data = json.loads(response.choices[0].message.content)
+    tranzaksiyalar = data.get("tranzaksiyalar") or []
+
+    return _normalize_transactions(tranzaksiyalar, today)
 
 
 ANALYST_SYSTEM_PROMPT = """

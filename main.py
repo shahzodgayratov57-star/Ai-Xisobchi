@@ -93,13 +93,20 @@ def _user_label(update: Update) -> str:
     return f"@{user.username}" if user.username else user.full_name
 
 
-async def _save_and_reply_transaction(update: Update, text: str) -> bool:
-    """Matnni tahlil qilib, undagi moliyaviy operatsiya(lar)ni jadvalga yozadi.
-    Bitta xabarda bir nechta operatsiya (masalan turli valyutada) bo'lishi
-    mumkin — har biri alohida qator sifatida saqlanadi. Kamida bitta operatsiya
-    aniqlangan bo'lsa True qaytaradi."""
+def _is_group_chat(update: Update) -> bool:
+    return bool(
+        config.ALLOWED_GROUP_CHAT_ID is not None
+        and update.effective_chat
+        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
+    )
 
-    transactions = ai_service.classify_transaction(text)
+
+async def _save_transactions(
+    update: Update, transactions: list[dict], source_text: str, share_izoh: bool = True
+) -> bool:
+    """Aniqlangan tranzaksiyalar ro'yxatini jadvalga yozadi. Guruhda hech qanday
+    javob yozilmaydi (jim saqlanadi), shaxsiy chatda esa har biri uchun tasdiq
+    xabari yuboriladi. Kamida bitta tranzaksiya bo'lsa True qaytaradi."""
 
     if not transactions:
         return False
@@ -109,8 +116,9 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
     has_xarajat = False
     # Bitta xabarda bir nechta tranzaksiya bo'lsa (masalan 2 xil valyutada),
     # ularning hammasi bir manbadan kelganini bilish uchun "izoh" ustuniga ham
-    # "original xabar"dagi bilan bir xil matn yoziladi.
-    shared_izoh = text if len(transactions) > 1 else None
+    # "original xabar"dagi bilan bir xil matn yoziladi. Rasmdan chiqarilgan
+    # ro'yxatda esa har bir qatorning o'z izohi saqlanadi (share_izoh=False).
+    shared_izoh = source_text if (share_izoh and len(transactions) > 1) else None
     for data in transactions:
         row = {
             "sana": data.get("sana") or now.strftime("%Y-%m-%d"),
@@ -121,7 +129,7 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
             "summa": data.get("summa") or 0,
             "valyuta": data.get("valyuta") or "UZS",
             "izoh": shared_izoh if shared_izoh is not None else (data.get("izoh") or ""),
-            "original_xabar": text,
+            "original_xabar": source_text,
         }
         sheets_service.append_transaction(row)
         saved_rows.append(row)
@@ -131,12 +139,7 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
     if has_xarajat:
         sheets_service.update_expense_chart()
 
-    is_group = (
-        config.ALLOWED_GROUP_CHAT_ID is not None
-        and update.effective_chat
-        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
-    )
-    if not is_group:
+    if not _is_group_chat(update):
         for row in saved_rows:
             emoji = "\U0001F4B5" if row["turi"] == "daromad" else "\U0001F4B8"
             await update.message.reply_text(
@@ -150,20 +153,24 @@ async def _save_and_reply_transaction(update: Update, text: str) -> bool:
     return True
 
 
+async def _save_and_reply_transaction(update: Update, text: str) -> bool:
+    """Matnni tahlil qilib, undagi moliyaviy operatsiya(lar)ni jadvalga yozadi.
+    Bitta xabarda bir nechta operatsiya (masalan turli valyutada) bo'lishi
+    mumkin — har biri alohida qator sifatida saqlanadi. Kamida bitta operatsiya
+    aniqlangan bo'lsa True qaytaradi."""
+
+    transactions = ai_service.classify_transaction(text)
+    return await _save_transactions(update, transactions, text)
+
+
 @restricted
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text
     await update.message.chat.send_action(ChatAction.TYPING)
 
-    is_group = (
-        config.ALLOWED_GROUP_CHAT_ID is not None
-        and update.effective_chat
-        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
-    )
-
     try:
         handled = await _save_and_reply_transaction(update, text)
-        if not handled and not is_group:
+        if not handled and not _is_group_chat(update):
             await update.message.reply_text(
                 "Bu xabarni moliyaviy operatsiya sifatida aniqlay olmadim. "
                 "Masalan: \"taksiga 25000 so'm sarfladim\" kabi yozib ko'ring, "
@@ -236,14 +243,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 @restricted
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    is_group = (
-        config.ALLOWED_GROUP_CHAT_ID is not None
-        and update.effective_chat
-        and update.effective_chat.id == config.ALLOWED_GROUP_CHAT_ID
-    )
-    if is_group:
-        # Guruhda har kuni yuboriladigan kunlik hisobot rasmlariga izoh yozilmaydi.
-        return
+    is_group = _is_group_chat(update)
 
     await update.message.chat.send_action(ChatAction.TYPING)
     photo = update.message.photo[-1]
@@ -252,15 +252,33 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     local_path = os.path.join(config.TEMP_DIR, f"photo_{photo.file_unique_id}.jpg")
     await tg_file.download_to_drive(local_path)
 
-    await update.message.reply_text("\U0001F50D Rasm qabul qilindi, tahlil qilinmoqda...")
-
     try:
         image_b64 = document_service.image_to_base64(local_path)
+
+        try:
+            transactions = ai_service.classify_transactions_from_image(image_b64, "rasm")
+        except Exception:
+            logger.exception("Rasmdan prixod/rasxod ajratishda xatolik")
+            transactions = []
+
+        handled = await _save_transactions(
+            update, transactions, "[Rasm orqali yuborilgan hisobot]", share_izoh=False
+        )
+        if handled:
+            return
+
+        if is_group:
+            # Guruhda har kuni yuboriladigan kunlik hisobot rasmlariga (prixod/
+            # rasxod topilmasa ham) izoh yozilmaydi.
+            return
+
+        await update.message.reply_text("\U0001F50D Rasm qabul qilindi, tahlil qilinmoqda...")
         analysis = ai_service.analyze_image_document(image_b64, "rasm")
         await _send_long_message(update, analysis)
     except Exception:
         logger.exception("Rasmni tahlil qilishda xatolik")
-        await update.message.reply_text("Kechirasiz, rasmni tahlil qilishda xatolik yuz berdi.")
+        if not is_group:
+            await update.message.reply_text("Kechirasiz, rasmni tahlil qilishda xatolik yuz berdi.")
     finally:
         if os.path.exists(local_path):
             os.remove(local_path)
