@@ -257,15 +257,27 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         image_b64 = document_service.image_to_base64(local_path)
 
-        try:
-            transactions = ai_service.classify_transactions_from_image(image_b64, "rasm")
-        except Exception:
-            logger.exception("Rasmdan prixod/rasxod ajratishda xatolik")
-            transactions = []
+        # Odatda rasmning o'zi (qo'lda yozilgan hisob-kitob qorolomasi) emas,
+        # balki rasm ostiga yozilgan izoh (caption) haqiqiy prixod/rasxod
+        # yozuvini o'z ichiga oladi (masalan "Prixod\n17.09.26 kassa\n
+        # 24.500.000+13.970$"). Shu sababli avval captionni oddiy matn
+        # sifatida tahlil qilamiz - bu yerda "rasxod"/"prixod" ustuvor qoidasi
+        # va ko'p valyutali bo'lish allaqachon ishlaydi.
+        caption = (update.message.caption or "").strip()
+        source_text = caption
+        transactions = ai_service.classify_transaction(caption) if caption else []
 
-        handled = await _save_transactions(
-            update, transactions, "[Rasm orqali yuborilgan hisobot]", share_izoh=False
-        )
+        if not transactions:
+            try:
+                image_transactions = ai_service.classify_transactions_from_image(image_b64, "rasm")
+            except Exception:
+                logger.exception("Rasmdan prixod/rasxod ajratishda xatolik")
+                image_transactions = []
+            if image_transactions:
+                transactions = image_transactions
+                source_text = caption or "[Rasm orqali yuborilgan hisobot]"
+
+        handled = await _save_transactions(update, transactions, source_text, share_izoh=True)
         if handled:
             return
 

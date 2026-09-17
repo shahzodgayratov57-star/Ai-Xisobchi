@@ -62,6 +62,11 @@ Misollar (faqat tuzilishni tushunish uchun, xabar matnini so'zma-so'z takrorlama
 - "-6.000$ toirakamga berdik 1.500 ta termostatga ost 27.934.000" — 2 ta xarajat
   tranzaksiyasi: summa=6000 valyuta=USD va summa=27934000 valyuta=UZS. "1.500 ta" —
   miqdor, summa emas, uchinchi tranzaksiya yaratilmaydi.
+- "Prixod\n17.09.26 kassa\n24.500.000+13.970$" (bu ko'pincha rasm ostidagi izoh
+  sifatida keladi) — 2 ta daromad tranzaksiyasi: summa=24500000 valyuta=UZS va
+  summa=13970 valyuta=USD, ikkalasi ham "daromad" ("Prixod" so'zi bor). Sana
+  "17.09.26" — kun.oy.yil (DD.MM.YY) formatida, ya'ni 2026-09-17. "kassa" —
+  izohga kiritilishi mumkin (masalan "Kunlik kassa daromadi").
 
 Qoidalar (har bir tranzaksiya uchun):
 - "turi" faqat "daromad" yoki "xarajat" bo'lishi kerak.
@@ -74,7 +79,9 @@ Qoidalar (har bir tranzaksiya uchun):
   Agar mos kategoriya topilmasa, eng yaqinini yoki "Boshqa xarajat"/"Boshqa daromad" ni tanla.
 - "summa" faqat son (float), valyuta belgilarisiz.
 - "valyuta" ISO kodda: "UZS", "USD", "EUR" va h.k. Agar aniq bo'lmasa "UZS" deb qo'y.
-- "sana" YYYY-MM-DD formatida. Agar xabarda sana aytilmagan bo'lsa, bugungi sana: {today}.
+- "sana" YYYY-MM-DD formatida qaytarilishi kerak. Xabarda sana "17.09.26" yoki
+  "17.09.2026" kabi kun.oy.yil (DD.MM.YY) formatida kelishi mumkin — buni to'g'ri
+  YYYY-MM-DD ga o'gir. Agar xabarda sana aytilmagan bo'lsa, bugungi sana: {today}.
 - "izoh" - operatsiyaning qisqa mazmuni (masalan: "Bozordan sabzavot sotib olindi").
 
 Agar xabarda umuman moliyaviy operatsiya bo'lmasa (masalan salomlashish yoki savol),
